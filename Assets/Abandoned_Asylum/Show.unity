@@ -3194,7 +3194,6 @@ GameObject:
   - component: {fileID: 1654416057}
   - component: {fileID: 1654416056}
   - component: {fileID: 1654416055}
-  - component: {fileID: 1654416054}
   m_Layer: 0
   m_Name: Player
   m_TagString: Player
@@ -3202,33 +3201,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &1654416054
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1654416053}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1a0880b1793053447b9f64ab43c5fca9, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  walkSpeed: 5
-  runSpeed: 8
-  slowWalkSpeed: 2.5
-  crouchSpeed: 2.5
-  maxStamina: 100
-  staminaDrain: 15
-  staminaRegen: 5
-  exhaustionCooldown: 5
-  currentStamina: 0
-  staminaBarUI: {fileID: 0}
-  mouseSensitivity: 2
-  playerCamera: {fileID: 241053627}
-  gravity: -9.81
-  crouchHeight: 1
-  standHeight: 2
 --- !u!143 &1654416055
 CharacterController:
   m_ObjectHideFlags: 0

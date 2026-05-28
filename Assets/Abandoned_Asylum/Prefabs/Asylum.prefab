@@ -45,7 +45,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a65754947e7ded8438b244ee9b1e3fee, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  openAngle: 90
+  maxOpenAngle: 110
   openSpeed: 3
 --- !u!1 &8604338806303997050
 GameObject:

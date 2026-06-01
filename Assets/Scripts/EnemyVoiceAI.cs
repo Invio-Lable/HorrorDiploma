@@ -1,4 +1,4 @@
-/*using UnityEngine;
+using UnityEngine;
 using UnityEngine.AI;
 
 public class EnemyVoiceAI : MonoBehaviour
@@ -29,4 +29,4 @@ public class EnemyVoiceAI : MonoBehaviour
             }
         }
     }
-}*/
+}

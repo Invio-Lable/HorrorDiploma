@@ -1,4 +1,4 @@
-/*using UnityEngine;
+using UnityEngine;
 
 public class MicInput : MonoBehaviour
 {
@@ -48,4 +48,4 @@ public class MicInput : MonoBehaviour
         }
         return levelMax;
     }
-}*/
+}

@@ -1,21 +1,34 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.AI;
+using UnityEngine.Video; // Додали бібліотеку для відео
 
 public class EnemyVoiceAI : MonoBehaviour
 {
-    // Створюємо стани для нашого монстра
-    public enum AIState { Patrol, Investigate }
+    public enum AIState { Patrol, Investigate, Jumpscare }
 
     [Header("Головні налаштування")]
     public Transform player;
     public float dangerThreshold = 0.05f;
 
-    [Header("Патрулювання")]
-    public float patrolRadius = 20f; // Як далеко може зайти шукаючи випадкову точку
-    public float waitTimeAtPoint = 4f; // Скільки стоїть на місці перед наступним кроком
+    [Header("Патрулювання та Пошук")]
+    public float patrolRadius = 20f;
+    public float waitTimeAtPoint = 4f;
+    public float investigateWaitTime = 6f;
 
-    [Header("Розслідування")]
-    public float investigateWaitTime = 6f; // Скільки часу шукає гравця на місці шуму
+    [Header("Скрімер (Відео) та Смерть")]
+    public float attackDistance = 1.8f;
+    public VideoPlayer jumpscareVideo;
+    public GameObject gameOverCanvas;
+
+    [Tooltip("Скрипт, який відповідає за ходьбу (WASD)")]
+    public MonoBehaviour playerMoveScript;
+
+    [Tooltip("Скрипт, який відповідає за поворот камери мишкою")]
+    public MonoBehaviour playerLookScript;
+
+    [Tooltip("Твій ліхтарик (весь об'єкт з моделлю і світлом)")]
+    public GameObject playerFlashlight;
 
     [Header("Анімації")]
     public Animator animator;
@@ -32,25 +45,31 @@ public class EnemyVoiceAI : MonoBehaviour
         agent = GetComponent<NavMeshAgent>();
         if (animator == null) animator = GetComponent<Animator>();
 
-        // Одразу відправляємо його в першу випадкову точку
         SetRandomPatrolPoint();
     }
 
     void Update()
     {
-        // 1. АНІМАЦІЯ ХОДЬБИ (Завжди оновлюємо швидкість)
+        if (currentState == AIState.Jumpscare) return;
+
+        // 1. ПЕРЕВІРКА НА СМЕРТЬ
+        if (Vector3.Distance(transform.position, player.position) <= attackDistance)
+        {
+            StartCoroutine(DoJumpscareSequence());
+            return;
+        }
+
         animator.SetFloat("Speed", agent.velocity.magnitude);
 
-        // 2. СЛУХ (Пріоритет №1)
+        // 2. СЛУХ
         float currentLoudness = MicInput.MicLoudness;
         if (currentLoudness >= dangerThreshold)
         {
-            // Якщо почув нас - перемикається в режим розслідування
             currentState = AIState.Investigate;
-            lastHeardPosition = player.position; // Запам'ятовує точку, де ми шуміли!
+            lastHeardPosition = player.position;
 
             agent.SetDestination(lastHeardPosition);
-            isWaiting = false; // Скидаємо очікування, якщо він стояв
+            isWaiting = false;
         }
 
         // 3. ЛОГІКА СТАНІВ
@@ -65,45 +84,86 @@ public class EnemyVoiceAI : MonoBehaviour
         }
     }
 
+    private IEnumerator DoJumpscareSequence()
+    {
+        currentState = AIState.Jumpscare;
+
+        // 1. Зупиняємо монстра та заморожуємо гравця
+        agent.isStopped = true;
+        agent.velocity = Vector3.zero;
+        if (playerMoveScript != null) playerMoveScript.enabled = false;
+        if (playerLookScript != null) playerLookScript.enabled = false;
+
+        // 2. ІСТИННЕ ПРИХОВУВАННЯ ЛІХТАРИКА (Куленепробивний метод)
+        if (playerFlashlight != null)
+        {
+            // Знаходимо всі компоненти, які малюють модель (MeshRenderer, SkinnedMeshRenderer)
+            Renderer[] renderers = playerFlashlight.GetComponentsInChildren<Renderer>();
+            foreach (Renderer r in renderers)
+            {
+                r.enabled = false; // Вимикаємо видимість моделі
+            }
+
+            // Знаходимо всі джерела світла (Light)
+            Light[] lights = playerFlashlight.GetComponentsInChildren<Light>();
+            foreach (Light l in lights)
+            {
+                l.enabled = false; // Вимикаємо саме світло
+            }
+        }
+
+        // 3. Запускаємо відео
+        if (jumpscareVideo != null)
+        {
+            jumpscareVideo.Play();
+            yield return new WaitForSeconds((float)jumpscareVideo.length);
+        }
+        else
+        {
+            yield return new WaitForSeconds(2f);
+        }
+
+        // 4. Показуємо Game Over та зупиняємо час
+        if (gameOverCanvas != null) gameOverCanvas.SetActive(true);
+        Time.timeScale = 0f;
+
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+    }
+
     private void PatrolLogic()
     {
-        // Якщо дійшов до випадкової точки (залишилось менше півметра)
         if (!agent.pathPending && agent.remainingDistance <= 0.5f)
         {
             if (!isWaiting)
             {
                 isWaiting = true;
                 waitTimer = waitTimeAtPoint;
-                animator.SetTrigger("Look"); // Озирається, коли прийшов на точку
+                animator.SetTrigger("Look");
             }
             else
             {
                 waitTimer -= Time.deltaTime;
-                if (waitTimer <= 0f)
-                {
-                    SetRandomPatrolPoint(); // Час вийшов, йдемо в нове місце
-                }
+                if (waitTimer <= 0f) SetRandomPatrolPoint();
             }
         }
     }
 
     private void InvestigateLogic()
     {
-        // Якщо дійшов до місця, де останній раз чув гравця
         if (!agent.pathPending && agent.remainingDistance <= 0.5f)
         {
             if (!isWaiting)
             {
                 isWaiting = true;
                 waitTimer = investigateWaitTime;
-                animator.SetTrigger("Look"); // Уважно озирається на місці шуму
+                animator.SetTrigger("Look");
             }
             else
             {
                 waitTimer -= Time.deltaTime;
                 if (waitTimer <= 0f)
                 {
-                    // Нікого не знайшов і більше не чув шуму — повертаємось до патруля
                     currentState = AIState.Patrol;
                     SetRandomPatrolPoint();
                 }
@@ -111,15 +171,12 @@ public class EnemyVoiceAI : MonoBehaviour
         }
     }
 
-    // Метод для пошуку випадкової точки на NavMesh
     private void SetRandomPatrolPoint()
     {
-        // Шукаємо випадкові координати в радіусі patrolRadius
         Vector3 randomDirection = Random.insideUnitSphere * patrolRadius;
         randomDirection += transform.position;
 
         NavMeshHit hit;
-        // Перевіряємо, чи є в цьому радіусі підлога (NavMesh)
         if (NavMesh.SamplePosition(randomDirection, out hit, patrolRadius, 1))
         {
             agent.SetDestination(hit.position);

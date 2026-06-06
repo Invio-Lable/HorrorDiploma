@@ -4,5 +4,8 @@
 EditorBuildSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 2
-  m_Scenes: []
+  m_Scenes:
+  - enabled: 1
+    path: Assets/Abandoned_Asylum/Show.unity
+    guid: 30fb6719a9eb1d84a807a42d598b16f8
   m_configObjects: {}

@@ -1,4 +1,4 @@
-/*using UnityEngine;
+using UnityEngine;
 using UnityEngine.UI;
 
 public class InventoryManager : MonoBehaviour
@@ -101,4 +101,4 @@ public class InventoryManager : MonoBehaviour
             }
         }
     }
-}*/
+}

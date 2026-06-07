@@ -1,79 +1,53 @@
-/*using UnityEngine;
-using UnityEngine.UI;
+using UnityEngine;
 
 public class PlayerInteraction : MonoBehaviour
 {
     [Header("Налаштування")]
     public float interactionDistance = 3f;
-    public LayerMask interactableLayer;
+    private Camera playerCamera;
 
-    [Header("Зв'язки")]
-    public Transform playerCamera;
-    public InventoryManager inventoryManager;
-
-    [Header("UI Елементи")]
-    public GameObject worldSpacePrompt;
-    public Image crosshair;
-
-    public Vector3 promptOffset = new Vector3(0, 0.5f, 0);
-    public Color defaultCrosshairColor = new Color(1, 1, 1, 0.5f);
-    public Color activeCrosshairColor = new Color(1, 0, 0, 0.8f);
+    [Header("Інтерфейс")]
+    public GameObject interactPrompt; // Напис "[E] Читати" на головному Canvas
 
     void Start()
     {
-        if (worldSpacePrompt != null) worldSpacePrompt.SetActive(false);
-        if (crosshair != null) crosshair.color = defaultCrosshairColor;
+        playerCamera = Camera.main;
+        if (interactPrompt != null) interactPrompt.SetActive(false);
     }
 
     void Update()
     {
-        Ray ray = new Ray(playerCamera.position, playerCamera.forward);
-        RaycastHit hit;
-
-        bool hitSomething = Physics.Raycast(ray, out hit, interactionDistance, interactableLayer);
-
-        if (hitSomething)
+        // Якщо ми зараз читаємо записку на весь екран - ховаємо підказку і не кидаємо лазер
+        if (GameManager.Instance.isReading)
         {
-            InteractableItem targetItem = hit.collider.GetComponent<InteractableItem>();
+            if (interactPrompt != null) interactPrompt.SetActive(false);
+            return;
+        }
 
-            if (targetItem != null)
+        // Кидаємо лазер з центру екрана
+        Ray ray = playerCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0));
+
+        if (Physics.Raycast(ray, out RaycastHit hit, interactionDistance))
+        {
+            // Чи є на об'єкті скрипт LetterItem?
+            LetterItem letter = hit.transform.GetComponent<LetterItem>();
+
+            if (letter != null)
             {
-                // 1. Змінюємо колір прицілу на активний
-                if (crosshair != null) crosshair.color = activeCrosshairColor;
+                // Ми дивимось на записку! Показуємо підказку
+                if (interactPrompt != null) interactPrompt.SetActive(true);
 
-                // 2. Показуємо і рухаємо підказку [F]
-                if (worldSpacePrompt != null)
+                // Якщо натиснули E - підбираємо
+                if (Input.GetKeyDown(KeyCode.E))
                 {
-                    worldSpacePrompt.SetActive(true);
-
-                    // Переміщуємо текст на позицію предмета + відступ вверх
-                    worldSpacePrompt.transform.position = hit.transform.position + promptOffset;
-
-                    // Змушуємо текст "дивитись" на камеру гравця (щоб не був боком)
-                    worldSpacePrompt.transform.LookAt(worldSpacePrompt.transform.position + playerCamera.rotation * Vector3.forward,
-                        playerCamera.rotation * Vector3.up);
+                    letter.PickUp();
+                    if (interactPrompt != null) interactPrompt.SetActive(false); // Ховаємо підказку після підбору
                 }
-
-                // 3. Логіка підбору
-                if (Input.GetKeyDown(KeyCode.F))
-                {
-                    bool added = inventoryManager.AddItem(targetItem.itemData);
-                    if (added)
-                    {
-                        Destroy(hit.collider.gameObject);
-                        // Одразу ховаємо UI, бо предмет зник
-                        worldSpacePrompt.SetActive(false);
-                        crosshair.color = defaultCrosshairColor;
-                    }
-                }
-                return;
+                return; // Виходимо, щоб не сховати підказку нижче
             }
         }
 
-        // Ховаємо підказку
-        if (worldSpacePrompt != null) worldSpacePrompt.SetActive(false);
-
-        // Повертаємо звичайний колір прицілу
-        if (crosshair != null) crosshair.color = defaultCrosshairColor;
+        // Якщо ми відвернулися або дивимось у стіну - ховаємо підказку
+        if (interactPrompt != null) interactPrompt.SetActive(false);
     }
-}*/
+}

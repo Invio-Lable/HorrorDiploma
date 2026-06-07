@@ -1,15 +1,22 @@
 using System.Collections;
 using UnityEngine;
 using UnityEngine.AI;
-using UnityEngine.Video; // Додали бібліотеку для відео
+using UnityEngine.Video;
 
 public class EnemyVoiceAI : MonoBehaviour
 {
-    public enum AIState { Patrol, Investigate, Jumpscare }
+    // Додали стан Chase (Переслідування)
+    public enum AIState { Patrol, Investigate, Chase, Jumpscare }
 
     [Header("Головні налаштування")]
     public Transform player;
     public float dangerThreshold = 0.05f;
+
+    [Header("Зір (Найвищий пріоритет)")]
+    public float visionDistance = 8f;        // Дальність зору (збільшив для тесту)
+    [Range(0, 180)]
+    public float visionAngle = 90f;          // Кут зору
+    public float eyeHeight = 1.5f;           // Висота очей (щоб лазер не бив у підлогу)
 
     [Header("Патрулювання та Пошук")]
     public float patrolRadius = 20f;
@@ -20,14 +27,8 @@ public class EnemyVoiceAI : MonoBehaviour
     public float attackDistance = 1.8f;
     public VideoPlayer jumpscareVideo;
     public GameObject gameOverCanvas;
-
-    [Tooltip("Скрипт, який відповідає за ходьбу (WASD)")]
     public MonoBehaviour playerMoveScript;
-
-    [Tooltip("Скрипт, який відповідає за поворот камери мишкою")]
     public MonoBehaviour playerLookScript;
-
-    [Tooltip("Твій ліхтарик (весь об'єкт з моделлю і світлом)")]
     public GameObject playerFlashlight;
 
     [Header("Анімації")]
@@ -52,27 +53,47 @@ public class EnemyVoiceAI : MonoBehaviour
     {
         if (currentState == AIState.Jumpscare) return;
 
-        // 1. ПЕРЕВІРКА НА СМЕРТЬ
+        // 1. ПЕРЕВІРКА НА СМЕРТЬ (Скрімер)
         if (Vector3.Distance(transform.position, player.position) <= attackDistance)
         {
             StartCoroutine(DoJumpscareSequence());
             return;
         }
 
+        // Оновлюємо анімацію ходьби
         animator.SetFloat("Speed", agent.velocity.magnitude);
 
-        // 2. СЛУХ
-        float currentLoudness = MicInput.MicLoudness;
-        if (currentLoudness >= dangerThreshold)
-        {
-            currentState = AIState.Investigate;
-            lastHeardPosition = player.position;
+        // --- ЛОГІКА ПРІОРИТЕТІВ ---
 
-            agent.SetDestination(lastHeardPosition);
-            isWaiting = false;
+        bool canSee = CanSeePlayer();
+        bool canHear = MicInput.MicLoudness >= dangerThreshold;
+
+        // ПРІОРИТЕТ 1: ЗІР
+        if (canSee)
+        {
+            currentState = AIState.Chase;
+            lastHeardPosition = player.position; // Запам'ятовуємо, де бачимо гравця, на випадок якщо він сховається
+        }
+        else
+        {
+            // Якщо ми тільки що його переслідували, але він забіг за стіну (canSee стало false)
+            if (currentState == AIState.Chase)
+            {
+                currentState = AIState.Investigate;
+                agent.SetDestination(lastHeardPosition); // Біжимо туди, де бачили востаннє
+                isWaiting = false;
+            }
+            // ПРІОРИТЕТ 2: СЛУХ (Тільки якщо не бачимо гравця)
+            else if (canHear)
+            {
+                currentState = AIState.Investigate;
+                lastHeardPosition = player.position;
+                agent.SetDestination(lastHeardPosition);
+                isWaiting = false;
+            }
         }
 
-        // 3. ЛОГІКА СТАНІВ
+        // --- ВИКОНАННЯ СТАНІВ ---
         switch (currentState)
         {
             case AIState.Patrol:
@@ -81,54 +102,51 @@ public class EnemyVoiceAI : MonoBehaviour
             case AIState.Investigate:
                 InvestigateLogic();
                 break;
+            case AIState.Chase:
+                ChaseLogic();
+                break;
         }
     }
 
-    private IEnumerator DoJumpscareSequence()
+    // ЛОГІКА ЗОРУ (З покращеним лазером)
+    private bool CanSeePlayer()
     {
-        currentState = AIState.Jumpscare;
+        float distanceToPlayer = Vector3.Distance(transform.position, player.position);
 
-        // 1. Зупиняємо монстра та заморожуємо гравця
-        agent.isStopped = true;
-        agent.velocity = Vector3.zero;
-        if (playerMoveScript != null) playerMoveScript.enabled = false;
-        if (playerLookScript != null) playerLookScript.enabled = false;
-
-        // 2. ІСТИННЕ ПРИХОВУВАННЯ ЛІХТАРИКА (Куленепробивний метод)
-        if (playerFlashlight != null)
+        if (distanceToPlayer <= visionDistance)
         {
-            // Знаходимо всі компоненти, які малюють модель (MeshRenderer, SkinnedMeshRenderer)
-            Renderer[] renderers = playerFlashlight.GetComponentsInChildren<Renderer>();
-            foreach (Renderer r in renderers)
+            Vector3 directionToPlayer = (player.position - transform.position).normalized;
+            float angleToPlayer = Vector3.Angle(transform.forward, directionToPlayer);
+
+            if (angleToPlayer <= visionAngle / 2f)
             {
-                r.enabled = false; // Вимикаємо видимість моделі
+                // Піднімаємо лазер на рівень очей монстра і цілимось у груди гравцю (щоб не бити йому в п'яти)
+                Vector3 rayStart = transform.position + Vector3.up * eyeHeight;
+                Vector3 rayEnd = player.GetComponent<Collider>().bounds.center;
+                Vector3 rayDirection = rayEnd - rayStart;
+
+                // МАЛЮЄМО ЛАЗЕР У ВІКНІ SCENE (Для дебагу)
+                Debug.DrawRay(rayStart, rayDirection.normalized * visionDistance, Color.red);
+
+                if (Physics.Raycast(rayStart, rayDirection, out RaycastHit hit, visionDistance))
+                {
+                    if (hit.transform.CompareTag("Player") || hit.transform.root.CompareTag("Player"))
+                    {
+                        return true;
+                    }
+                }
             }
-
-            // Знаходимо всі джерела світла (Light)
-            Light[] lights = playerFlashlight.GetComponentsInChildren<Light>();
-            foreach (Light l in lights)
-            {
-                l.enabled = false; // Вимикаємо саме світло
-            }
         }
+        return false;
+    }
 
-        // 3. Запускаємо відео
-        if (jumpscareVideo != null)
-        {
-            jumpscareVideo.Play();
-            yield return new WaitForSeconds((float)jumpscareVideo.length);
-        }
-        else
-        {
-            yield return new WaitForSeconds(2f);
-        }
+    // --- ЛОГІКА СТАНІВ ---
 
-        // 4. Показуємо Game Over та зупиняємо час
-        if (gameOverCanvas != null) gameOverCanvas.SetActive(true);
-        Time.timeScale = 0f;
-
-        Cursor.lockState = CursorLockMode.None;
-        Cursor.visible = true;
+    private void ChaseLogic()
+    {
+        // Постійно оновлюємо ціль на Гравця. Монстр буде йти за тобою крок у крок!
+        agent.SetDestination(player.position);
+        isWaiting = false;
     }
 
     private void PatrolLogic()
@@ -182,5 +200,40 @@ public class EnemyVoiceAI : MonoBehaviour
             agent.SetDestination(hit.position);
             isWaiting = false;
         }
+    }
+
+    private IEnumerator DoJumpscareSequence()
+    {
+        currentState = AIState.Jumpscare;
+
+        agent.isStopped = true;
+        agent.velocity = Vector3.zero;
+        if (playerMoveScript != null) playerMoveScript.enabled = false;
+        if (playerLookScript != null) playerLookScript.enabled = false;
+
+        if (playerFlashlight != null)
+        {
+            Renderer[] renderers = playerFlashlight.GetComponentsInChildren<Renderer>();
+            foreach (Renderer r in renderers) r.enabled = false;
+
+            Light[] lights = playerFlashlight.GetComponentsInChildren<Light>();
+            foreach (Light l in lights) l.enabled = false;
+        }
+
+        if (jumpscareVideo != null)
+        {
+            jumpscareVideo.Play();
+            yield return new WaitForSeconds((float)jumpscareVideo.length);
+        }
+        else
+        {
+            yield return new WaitForSeconds(2f);
+        }
+
+        if (gameOverCanvas != null) gameOverCanvas.SetActive(true);
+        Time.timeScale = 0f;
+
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
     }
 }
